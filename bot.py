@@ -54,27 +54,30 @@ class TickBody(BaseModel):
     now: str
     available_triggers: list[str] = []
 
+import concurrent.futures
+
 @app.post("/v1/tick")
 async def tick(body: TickBody):
     actions = []
-    for trg_id in body.available_triggers:
+    
+    def process_trigger(trg_id):
         trg = contexts.get(("trigger", trg_id), {}).get("payload")
-        if not trg: continue
+        if not trg: return None
         
         merchant_id = trg.get("merchant_id")
         merchant = contexts.get(("merchant", merchant_id), {}).get("payload")
-        if not merchant: continue
+        if not merchant: return None
             
         category = contexts.get(("category", merchant.get("category_slug")), {}).get("payload")
-        if not category: continue
+        if not category: return None
             
         customer_id = trg.get("customer_id")
         customer = contexts.get(("customer", customer_id), {}).get("payload") if customer_id else None
 
-        # Call the composer logic
+        # Call the composer logic (synchronous blocking network call)
         msg_parts = compose(category, merchant, trg, customer)
         
-        actions.append({
+        return {
             "conversation_id": f"conv_{merchant_id}_{trg_id}",
             "merchant_id": merchant_id, 
             "customer_id": customer_id,
@@ -86,7 +89,14 @@ async def tick(body: TickBody):
             "cta": msg_parts.get("cta", "open_ended"),
             "suppression_key": msg_parts.get("suppression_key", trg.get("suppression_key", "")),
             "rationale": msg_parts.get("rationale", "")
-        })
+        }
+
+    # Use ThreadPool to process all triggers concurrently to avoid 30s timeout
+    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+        results = executor.map(process_trigger, body.available_triggers)
+        for r in results:
+            if r: actions.append(r)
+            
     return {"actions": actions}
 
 class ReplyBody(BaseModel):

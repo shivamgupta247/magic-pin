@@ -38,20 +38,21 @@ class CtxBody(BaseModel):
     context_id: str
     version: int
     payload: dict[str, Any]
-    delivered_at: str
+    delivered_at: str | None = None
 
 @app.post("/v1/context")
 async def push_context(body: CtxBody):
     key = (body.scope, body.context_id)
     cur = contexts.get(key)
     if cur and cur["version"] >= body.version:
-        return {"accepted": False, "reason": "stale_version", "current_version": cur["version"]}
+        from fastapi.responses import JSONResponse
+        return JSONResponse(status_code=409, content={"accepted": False, "reason": "stale_version", "current_version": cur["version"]})
     contexts[key] = {"version": body.version, "payload": body.payload}
     return {"accepted": True, "ack_id": f"ack_{body.context_id}_v{body.version}",
             "stored_at": datetime.utcnow().isoformat() + "Z"}
 
 class TickBody(BaseModel):
-    now: str
+    now: str | None = None
     available_triggers: list[str] = []
 
 import concurrent.futures
@@ -84,7 +85,7 @@ async def tick(body: TickBody):
             "send_as": msg_parts.get("send_as", "vera"), 
             "trigger_id": trg_id,
             "template_name": "vera_generic_v1",
-            "template_params": [merchant['identity']['name']],
+            "template_params": [merchant.get('identity', {}).get('name', 'Merchant')],
             "body": msg_parts.get("body", ""), 
             "cta": msg_parts.get("cta", "open_ended"),
             "suppression_key": msg_parts.get("suppression_key", trg.get("suppression_key", "")),

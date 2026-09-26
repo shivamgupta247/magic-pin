@@ -89,6 +89,11 @@ def respond(history: list[dict], merchant: dict | None = None) -> dict:
             response_format={"type": "json_object"},
             temperature=0.0
         )
-        return json.loads(response.choices[0].message.content)
+        result = json.loads(response.choices[0].message.content)
+        if "action" in result: result["action"] = result["action"].lower()
+        return result
     except Exception as e:
+        last_msg = history[-1]['msg'].lower() if history else ""
+        if any(w in last_msg for w in ["stop", "no", "fuck", "hate", "unsubscribe"]):
+            return {"action": "end", "rationale": "Fallback: user requested stop or was hostile."}
         return {"action": "send", "body": "Got it, thanks!", "cta": "none", "rationale": "Fallback reply"}

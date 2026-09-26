@@ -24,11 +24,11 @@ async def healthz():
 @app.get("/v1/metadata")
 async def metadata():
     return {
-        "team_name": "AI Builders", 
-        "team_members": ["Assistant"], 
+        "team_name": "team-shivam", 
+        "team_members": ["Shivam Gupta"], 
         "model": os.environ.get("OPENROUTER_MODEL", "meta-llama/llama-3.1-70b-instruct"),
         "approach": "single-prompt composer with structured JSON output", 
-        "contact_email": "hello@example.com",
+        "contact_email": "shivamgupta57542@gmail.com",
         "version": "1.0.0", 
         "submitted_at": datetime.utcnow().isoformat() + "Z"
     }

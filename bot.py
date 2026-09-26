@@ -95,7 +95,7 @@ class ReplyBody(BaseModel):
     customer_id: str | None = None
     from_role: str
     message: str
-    received_at: str
+    received_at: str | None = None
     turn_number: int
 
 merchant_history: dict[str, list] = {}

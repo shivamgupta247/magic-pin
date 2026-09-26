@@ -55,12 +55,10 @@ class TickBody(BaseModel):
     now: str | None = None
     available_triggers: list[str] = []
 
-import concurrent.futures
+import asyncio
 
 @app.post("/v1/tick")
 async def tick(body: TickBody):
-    actions = []
-    
     def process_trigger(trg_id):
         trg = contexts.get(("trigger", trg_id), {}).get("payload")
         if not trg: return None
@@ -75,7 +73,7 @@ async def tick(body: TickBody):
         customer_id = trg.get("customer_id")
         customer = contexts.get(("customer", customer_id), {}).get("payload") if customer_id else None
 
-        # Call the composer logic (synchronous blocking network call)
+        # Call the composer logic (synchronous network call to OpenRouter)
         msg_parts = compose(category, merchant, trg, customer)
         
         return {
@@ -92,12 +90,11 @@ async def tick(body: TickBody):
             "rationale": msg_parts.get("rationale", "")
         }
 
-    # Use ThreadPool to process all triggers concurrently to avoid 30s timeout
-    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
-        results = executor.map(process_trigger, body.available_triggers)
-        for r in results:
-            if r: actions.append(r)
-            
+    # Run blocking synchronous compose calls in background threads using asyncio
+    tasks = [asyncio.to_thread(process_trigger, trg_id) for trg_id in body.available_triggers]
+    results = await asyncio.gather(*tasks)
+    
+    actions = [r for r in results if r]
     return {"actions": actions}
 
 class ReplyBody(BaseModel):
@@ -138,7 +135,7 @@ async def reply(body: ReplyBody):
     # Format history for LLM
     llm_history = [{"from": "merchant", "msg": msg} for msg in history]
     
-    return respond(history=llm_history, merchant=merchant_data)
+    return await asyncio.to_thread(respond, history=llm_history, merchant=merchant_data)
 
 if __name__ == "__main__":
     import uvicorn
